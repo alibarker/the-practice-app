@@ -1,9 +1,9 @@
 import { SessionBreakdown } from '../components/SessionBreakdown';
 import { formatSessionDate } from '../domain/format';
-import type { SessionHistory } from '../domain/types';
+import type { SessionSummary } from '../domain/types';
 
 interface Props {
-  record: SessionHistory;
+  record: SessionSummary;
   saved: boolean;
   onDone: () => void;
 }

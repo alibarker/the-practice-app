@@ -49,8 +49,8 @@ export interface ActiveSession {
   sectionRecords: SectionRecord[];
 }
 
-export interface SessionHistory {
-  id?: number;
+/** What a finished session produced, before it is stored. */
+export interface SessionSummary {
   planId: string;
   planName: string;
   startedAt: number;
@@ -62,3 +62,15 @@ export interface SessionHistory {
   pausedTotalMs: number;
   sections: (SectionRecord & { title: string; kind: SectionKind })[];
 }
+
+/** Fields every synced record carries. Times are epoch ms from the device that made the change. */
+export interface SyncFields {
+  /** UUID, so records created on different devices never collide. */
+  id: string;
+  /** When this record was last changed; the newer change wins in a conflict. */
+  modifiedAt: number;
+  /** Soft delete, so deletions reach other devices. */
+  deletedAt: number | null;
+}
+
+export type SessionHistory = SessionSummary & SyncFields;

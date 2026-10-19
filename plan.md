@@ -13,7 +13,7 @@ Primary device: **iPad** (on a music stand, landscape or portrait). It also has 
 | Delivery     | **Progressive Web App (PWA)**, installed with Safari → Share → _Add to Home Screen_                                                                    | Runs on iPad, phone and laptop from one codebase. No App Store and no $99/yr Apple account. Works offline.                  |
 | Stack        | **React + TypeScript + Vite**                                                                                                                          | Large ecosystem with good libraries for later work (pdf.js, Dexie, Web Audio). Developer-friendly.                          |
 | PWA tooling  | `vite-plugin-pwa` (Workbox)                                                                                                                            | Generates the service worker and manifest. Full offline support.                                                            |
-| Storage      | **On the device only.** Active session in `localStorage`; session history in **IndexedDB via Dexie**                                                   | Simple and private. IndexedDB will also hold logs and PDFs later.                                                           |
+| Storage      | **Local-first.** Active session in `localStorage`; session history in **IndexedDB via Dexie**. Optional **Supabase** sync (see 2.6)                    | The app never waits on the network, so it works offline in a practice room. Sync keeps devices in step when online.         |
 | Hosting      | **GitHub Pages**, deployed automatically by GitHub Actions on push to `main`                                                                           | Free. URL: `https://alibarker.github.io/the-practice-app/`                                                                  |
 | Routing      | Simple view state in `App.tsx`, no router                                                                                                              | There's a single URL, so GitHub Pages has nothing to 404 on. A reload restores an active session through the resume banner. |
 | Testing / CI | **Vitest** unit tests (timer and session logic), ESLint, Prettier, `tsc` typecheck. One GitHub Action runs lint, typecheck, test, build, then deploys. | Most of the risk is in the timer maths, which unit tests cover well.                                                        |
@@ -69,7 +69,8 @@ Designed to be read from 1–2 m away: very large timer digits and big tap targe
 ### 2.4 History screen
 
 - A simple list, newest first: date/time, plan name, planned vs. actual duration, and whether it was completed or ended early.
-- Tap an entry to see its per-section breakdown (the same view as the summary).
+- Tap an entry to see its per-section breakdown (the same view as the summary), with a **Delete** button.
+- The list updates live, so sessions synced from another device appear without leaving the screen.
 
 ### 2.5 Robustness
 
@@ -78,11 +79,28 @@ Designed to be read from 1–2 m away: very large timer digits and big tap targe
 - **Resume after reload.** The active session state is written to `localStorage` on every state change, so a reload or app relaunch restores it exactly.
 - **Storage persistence.** Call `navigator.storage.persist()` on first run. iOS only keeps storage long-term for home-screen-installed PWAs; in a plain Safari tab, data can be evicted after about 7 days of no use. The README will say to install to the home screen.
 
+### 2.6 Sync across devices (Supabase)
+
+Added after v1. Optional: a build without Supabase settings has sync turned off and hides its UI. Setup steps are in the README.
+
+- **Local-first.** IndexedDB on each device is the source the app reads and writes. Sync runs alongside it, so practice never depends on a connection.
+- **Sign-in:** email plus a one-time **code** (Supabase email OTP). It doesn't use magic links, because on iOS a link opens Safari, which has separate storage from the home-screen app.
+- **What syncs:** session history. The session in progress stays on its device.
+- **Records:** UUID ids (so devices never collide), plus `modifiedAt` and `deletedAt` (soft delete, so deletions spread to other devices). Locally, a `dirty` flag marks rows the server hasn't seen yet.
+- **Engine** (`src/sync/engine.ts`, independent of Supabase so it's unit-tested and reusable for plans and logs later):
+  1. Push dirty rows (upsert). Mark them clean only if they didn't change during the push.
+  2. Pull rows changed since the last pull, paged. The cursor is the server-stamped `updated_at`, so device clock differences don't matter.
+  3. Conflicts: **newest `modifiedAt` wins**, enforced both on the device and by a database trigger that ignores older writes.
+- **When it syncs:** on app open or sign-in, after saving or deleting a session, when the device comes back online, and when the app returns to the foreground (at most once a minute). There's also a **Sync now** button.
+- **Security:** row-level security limits every row to its owner (`user_id` defaults to `auth.uid()`). There's no delete policy, so deletes are always soft. The URL and publishable key in the build are public by design.
+- **Migration:** v1 history (numeric ids) moves to the new table with UUIDs on first launch, marked dirty, so it uploads on the first sign-in.
+- **Sign-out** keeps history on the device. Anything new uploads on the next sign-in.
+
 ### Out of scope for v1
 
 - Creating or editing plans (plans are hardcoded in `src/data/plans.ts`).
 - Sound of any kind.
-- Export/import and sync.
+- Export/import. (Sync was added afterwards: see 2.6.)
 
 ---
 
@@ -188,9 +206,8 @@ interface SectionLog {
   notes?: string;
 }
 
-// History (IndexedDB via Dexie, table 'sessions')
-interface SessionHistory {
-  id?: number;
+// What finishSession produces
+interface SessionSummary {
   planId: string;
   planName: string;
   startedAt: number;
@@ -202,6 +219,16 @@ interface SessionHistory {
   sections: (SectionRecord & { title: string; kind: SectionKind })[];
   // future: sessionNotes?
 }
+
+// Fields on every synced record
+interface SyncFields {
+  id: string; // UUID
+  modifiedAt: number; // last change, by the device that made it; newest wins
+  deletedAt: number | null; // soft delete
+}
+
+// History (IndexedDB via Dexie, table 'history'; Supabase table public.sessions)
+type SessionHistory = SessionSummary & SyncFields; // stored locally with dirty: 0 | 1
 ```
 
 ### Timer logic (pure functions, fully unit-tested)
@@ -237,10 +264,12 @@ the-practice-app/
 │  ├─ storage/
 │  │  ├─ activeSession.ts    # localStorage
 │  │  └─ db.ts               # Dexie history
+│  ├─ sync/                  # engine, Dexie adapter, Supabase adapter, sign-in + status
 │  ├─ hooks/                 # useNow, useWakeLock
-│  ├─ screens/               # Home, Practice, Summary, History (+ detail)
-│  ├─ components/            # ProgressBar, SectionList, SessionBreakdown
+│  ├─ screens/               # Home, Practice, Summary, History (+ detail), Account (sync)
+│  ├─ components/            # ProgressBar, SectionList, SessionBreakdown, SyncBadge
 │  └─ styles/                # CSS variables, dark/light, large type
+├─ supabase/migrations/      # table, RLS, newest-change-wins trigger
 └─ .github/workflows/ci.yml  # lint, typecheck, test, build, deploy to Pages
 ```
 
@@ -248,28 +277,29 @@ the-practice-app/
 
 ## 6. Milestones
 
-Milestones 1–6 are done (v1 built). Remaining:
+Milestones 1–7 are done: v1 is built, deployed to GitHub Pages and working on the iPad. Then:
 
-7. **Device QA.** Real iPad testing in both orientations, plus phone and laptop. Lock/unlock, app switching and reload mid-session. Needs Pages enabled first (Settings → Pages → Source: GitHub Actions) and the branch merged to `main`.
+8. **Sync** (2.6). Built. Remaining: the Supabase project setup in the README, then a real two-device check.
 
 ---
 
 ## 7. Future work (in priority order)
 
-1. **Session logging** _(top priority, and the data model is ready for it)_. Per section, record what was done: exercises, tempos, articulations and free notes. Edit on the summary screen and while practising. History detail shows the logs.
+1. **Session logging** _(top priority; the data model is ready, and logs will sync through the same engine)_. Per section, record what was done: exercises, tempos, articulations and free notes. Edit on the summary screen and while practising. History detail shows the logs.
 2. **Plan editor.** Create, duplicate, edit and reorder plans and sections. Possibly real min/max ranges with a "target vs. over" display. Built-in plans become editable copies.
 3. **Metronome.** Web Audio with lookahead scheduling for accurate timing. Per-section default tempo (e.g. Clarke at ♩=100), which also feeds the log.
 4. **PDFs for notation.** Store PDFs in IndexedDB, attach them to sections, and render them with pdf.js beside the timer.
 5. **Tuner.** Mic input (`getUserMedia`) with pitch detection (autocorrelation/YIN), showing concert or B♭ pitch.
 
-- Later ideas: export/import backup, sync across devices, a practice streak and stats, sound cues (optional), and a custom domain.
+- Later ideas: export/import backup, a practice streak and stats, sound cues (optional), and a custom domain.
 
 ---
 
 ## 8. Known risks / iOS caveats
 
 - **Wake Lock in home-screen PWAs** was buggy on some iOS versions; it works in recent iOS (18.4+). Fallback: a muted looping-video "NoSleep" trick if testing shows problems.
-- **Storage eviction.** Only installed PWAs are safe from Safari's 7-day eviction. Since storage is on the device only, wiping or deleting the app loses history, so export/import is a cheap later safeguard.
+- **Storage eviction.** Only installed PWAs are safe from Safari's 7-day eviction. With sync on, Supabase holds a copy, so a wiped device gets its history back on sign-in. Without sync, history lives only on the device.
+- **Supabase free tier** pauses projects after about a week with no activity. Sync fails until the project is restored in the dashboard, but practice keeps working offline.
 - **Audio** (for later features) needs a user gesture to unlock. The Start tap will handle it.
 
 ---

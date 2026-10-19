@@ -1,20 +1,23 @@
 import { useEffect, useState } from 'react';
 import { finishSession, reduceSession, shouldSave, startSession } from './domain/session';
-import type { ActiveSession, Plan, SessionHistory } from './domain/types';
+import type { ActiveSession, Plan, SessionSummary } from './domain/types';
 import type { SessionAction } from './domain/session';
 import { loadActiveSession, saveActiveSession } from './storage/activeSession';
 import { saveSession } from './storage/db';
+import { AccountScreen } from './screens/Account';
 import { HistoryDetailScreen, HistoryScreen } from './screens/History';
 import { HomeScreen } from './screens/Home';
 import { PracticeScreen } from './screens/Practice';
 import { SummaryScreen } from './screens/Summary';
+import { requestSync } from './sync/sync';
 
 type View =
   | { name: 'home' }
   | { name: 'practice' }
-  | { name: 'summary'; record: SessionHistory; saved: boolean }
+  | { name: 'summary'; record: SessionSummary; saved: boolean }
   | { name: 'history' }
-  | { name: 'historyDetail'; id: number };
+  | { name: 'historyDetail'; id: string }
+  | { name: 'account' };
 
 export default function App() {
   const [session, setSession] = useState<ActiveSession | null>(loadActiveSession);
@@ -36,7 +39,8 @@ export default function App() {
     const saved = shouldSave(record);
     if (saved) {
       try {
-        record.id = await saveSession(record);
+        await saveSession(record);
+        void requestSync();
       } catch (err) {
         console.error('Failed to save session', err);
       }
@@ -68,6 +72,8 @@ export default function App() {
       );
     case 'historyDetail':
       return <HistoryDetailScreen id={view.id} onBack={() => setView({ name: 'history' })} />;
+    case 'account':
+      return <AccountScreen onBack={() => setView({ name: 'home' })} />;
   }
 
   return (
@@ -77,6 +83,7 @@ export default function App() {
       onResume={() => setView({ name: 'practice' })}
       onDiscard={() => setSession(null)}
       onHistory={() => setView({ name: 'history' })}
+      onAccount={() => setView({ name: 'account' })}
     />
   );
 }

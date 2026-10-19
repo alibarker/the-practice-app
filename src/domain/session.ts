@@ -1,5 +1,5 @@
 import { planTotalSec, sectionElapsedMs, totalElapsedMs } from './timer';
-import type { ActiveSession, Plan, SessionHistory } from './types';
+import type { ActiveSession, Plan, SessionSummary } from './types';
 
 /** Sessions shorter than this (e.g. an accidental tap on a plan card) aren't saved. */
 export const MIN_SAVED_SESSION_MS = 10_000;
@@ -91,7 +91,7 @@ export function reduceSession(s: ActiveSession, action: SessionAction, now: numb
   }
 }
 
-export function finishSession(s: ActiveSession, now: number, completed: boolean): SessionHistory {
+export function finishSession(s: ActiveSession, now: number, completed: boolean): SessionSummary {
   const actualTotalMs = totalElapsedMs(s, now);
   const closed = closeCurrentSection(s, now);
   return {
@@ -110,6 +110,6 @@ export function finishSession(s: ActiveSession, now: number, completed: boolean)
   };
 }
 
-export function shouldSave(h: SessionHistory): boolean {
+export function shouldSave(h: SessionSummary): boolean {
   return h.actualTotalMs >= MIN_SAVED_SESSION_MS;
 }

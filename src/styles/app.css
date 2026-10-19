@@ -533,3 +533,70 @@ h2:focus {
 .history-status.early {
   color: var(--over);
 }
+
+/* Sync */
+.sync-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.sync-badge.muted {
+  color: var(--muted);
+}
+.sync-badge.error {
+  color: var(--over);
+}
+.sync-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--rest);
+}
+.sync-dot.syncing {
+  background: var(--accent);
+}
+.sync-dot.error {
+  background: var(--over);
+}
+.sync-dot.offline,
+.sync-badge.muted .sync-dot {
+  background: var(--muted);
+}
+
+.account-panel {
+  max-width: 520px;
+  font-size: 1.1rem;
+}
+.account-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.account-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+}
+.account-form input {
+  min-height: 56px;
+  padding: 0 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 1.25rem;
+}
+.account-actions {
+  display: flex;
+  gap: 12px;
+  margin: 16px 0;
+}
+.sync-status.error,
+.form-error {
+  color: var(--over);
+}
+.btn.danger {
+  color: var(--over);
+}

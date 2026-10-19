@@ -2,6 +2,7 @@ import { PLANS } from '../data/plans';
 import { formatMinutes } from '../domain/format';
 import { planTotalSec } from '../domain/timer';
 import type { ActiveSession, Plan } from '../domain/types';
+import { SyncBadge } from '../components/SyncBadge';
 
 interface Props {
   activeSession: ActiveSession | null;
@@ -9,9 +10,17 @@ interface Props {
   onResume: () => void;
   onDiscard: () => void;
   onHistory: () => void;
+  onAccount: () => void;
 }
 
-export function HomeScreen({ activeSession, onStart, onResume, onDiscard, onHistory }: Props) {
+export function HomeScreen({
+  activeSession,
+  onStart,
+  onResume,
+  onDiscard,
+  onHistory,
+  onAccount,
+}: Props) {
   const start = (plan: Plan) => {
     if (activeSession && !window.confirm('Discard the unfinished session and start a new one?')) {
       return;
@@ -23,6 +32,7 @@ export function HomeScreen({ activeSession, onStart, onResume, onDiscard, onHist
     <main className="screen home">
       <header className="topbar">
         <h1>The Practice App</h1>
+        <SyncBadge onClick={onAccount} />
         <button className="btn ghost" onClick={onHistory}>
           History
         </button>
