@@ -84,7 +84,7 @@ Designed to be read from 1–2 m away: very large timer digits and big tap targe
 Added after v1. Optional: a build without Supabase settings has sync turned off and hides its UI. Setup steps are in the README.
 
 - **Local-first.** IndexedDB on each device is the source the app reads and writes. Sync runs alongside it, so practice never depends on a connection.
-- **Sign-in:** email plus a one-time **code** (Supabase email OTP). It doesn't use magic links, because on iOS a link opens Safari, which has separate storage from the home-screen app.
+- **Sign-in:** **email + password** (iOS can save it in the keychain). Emailed codes would need custom SMTP: Supabase's built-in sender won't let you edit templates to include the code. Magic links don't work either, because on iOS a link opens Safari, which has separate storage from the home-screen app. The only email is a one-off confirmation link at sign-up, which can be turned off.
 - **What syncs:** session history. The session in progress stays on its device.
 - **Records:** UUID ids (so devices never collide), plus `modifiedAt` and `deletedAt` (soft delete, so deletions spread to other devices). Locally, a `dirty` flag marks rows the server hasn't seen yet.
 - **Engine** (`src/sync/engine.ts`, independent of Supabase so it's unit-tested and reusable for plans and logs later):

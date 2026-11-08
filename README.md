@@ -29,25 +29,25 @@ To test on the iPad against your Mac, run `npm run dev -- --host`, then open the
 
 ## Sync across devices (Supabase)
 
-Sync is optional. Without the settings below, the app builds with sync turned off and works entirely on the device. With them, a **Sync** button on the home screen lets you sign in with an emailed code. Your history is then kept in step across every device you sign in on. Each device also keeps its own copy, so the app still works offline.
+Sync is optional. Without the settings below, the app builds with sync turned off and works entirely on the device. With them, a **Sync** button on the home screen lets you sign in with your email and a password. Your history is then kept in step across every device you sign in on. Each device also keeps its own copy, so the app still works offline.
 
 One-time setup:
 
 1. **Create a project** at [supabase.com](https://supabase.com) (the free tier is plenty).
 2. **Create the table:** open **SQL Editor → New query**, paste in [`supabase/migrations/20261019000000_sessions.sql`](supabase/migrations/20261019000000_sessions.sql), and click **Run**.
-3. **Send sign-in codes, not links:** go to **Authentication → Emails → Templates**. In both the **Magic Link** and **Confirm signup** templates, replace the link with the code, for example `<p>Your Practice App code: <strong>{{ .Token }}</strong></p>`. (On iPad, a link would open in Safari, not the installed app, so the app uses codes.)
+3. **Point email links at the app:** go to **Authentication → URL Configuration** and set **Site URL** to `https://alibarker.github.io/the-practice-app/`. The only email you'll get is a one-off link to confirm your address when you create your account. Without this setting, that link ends on a "can't connect to localhost" page, although the confirmation still works. No SMTP setup or template edits are needed.
 4. **Give the build your project's address and key.** In the Supabase project, click **Connect** (or open **Project Settings → API Keys**) and copy the **Project URL** and the **publishable key** (the older **anon** key also works). Then in this GitHub repo, go to **Settings → Secrets and variables → Actions → Variables tab → New repository variable** and add:
    - `SUPABASE_URL` = the project URL
    - `SUPABASE_PUBLISHABLE_KEY` = the key
 
    Both values are designed to be public. Row-level security on the table is what keeps your data private. Re-run the latest CI workflow on `main` (or push anything) to rebuild with sync on.
 
-5. **Sign in on each device** (Sync → enter email → enter code). History already on a device is uploaded on its first sign-in.
-6. **Optional, recommended:** after you've signed in once, turn off **Authentication → Sign In / Providers → Allow new users to sign up**, so nobody else can create an account on your project.
+5. **Create your account once:** tap Sync → **First time? Create an account**, then choose an email and password. Tap the confirmation link Supabase emails you (it's fine if it opens in Safari), then come back to the app and **Sign in**. If you'd rather skip the email, turn off **Authentication → Sign In / Providers → Email → Confirm email** first.
+6. **Sign in on each other device** with the same email and password. History already on a device is uploaded on its first sign-in. Forgot the password? Set a new one under **Authentication → Users** in the Supabase dashboard.
+7. **Optional, recommended:** after you've created your account, turn off **Authentication → Sign In / Providers → Allow new users to sign up**, so nobody else can create an account on your project.
 
 Things to know:
 
-- Supabase's built-in email sender only allows a few emails an hour. That's fine for signing in occasionally.
 - Free projects are paused after about a week with no activity. If sync starts failing after a break, restore the project from the Supabase dashboard. Practice keeps working offline either way.
 - For local development with sync, copy `.env.example` to `.env.local` and fill it in.
 
