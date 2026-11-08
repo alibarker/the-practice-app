@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PLANS } from '../data/plans';
 import { finishSession, reduceSession, startSession } from '../domain/session';
 import { loadActiveSession, saveActiveSession } from './activeSession';
-import { getSession, listSessions, saveSession } from './db';
+import { db, deleteSession, getSession, listSessions, saveSession } from './db';
 
 const T0 = 1_700_000_000_000;
 
@@ -25,13 +25,21 @@ describe('active session storage', () => {
 });
 
 describe('history db', () => {
-  it('saves and lists sessions newest first', async () => {
-    const a = finishSession(startSession(PLANS[0]!, T0), T0 + 60_000, false);
-    const b = finishSession(startSession(PLANS[2]!, T0 + 86_400_000), T0 + 86_460_000, true);
-    const idA = await saveSession(a);
-    await saveSession(b);
-    const list = await listSessions();
-    expect(list.map((h) => h.planId)).toEqual(['plan-60', 'plan-25']);
-    expect((await getSession(idA))?.planName).toBe('25 min');
+  it('saves with a UUID, lists newest first, and soft-deletes', async () => {
+    const a = await saveSession(finishSession(startSession(PLANS[0]!, T0), T0 + 60_000, false));
+    await saveSession(
+      finishSession(startSession(PLANS[2]!, T0 + 86_400_000), T0 + 86_460_000, true),
+    );
+    expect(a.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect((await listSessions()).map((h) => h.planId)).toEqual(['plan-60', 'plan-25']);
+    expect((await getSession(a.id))?.planName).toBe('25 min');
+    expect((await db.history.get(a.id))?.dirty).toBe(1);
+
+    await deleteSession(a.id);
+    expect(await getSession(a.id)).toBeUndefined();
+    expect((await listSessions()).map((h) => h.planId)).toEqual(['plan-60']);
+    const tombstone = await db.history.get(a.id);
+    expect(tombstone?.deletedAt).not.toBeNull();
+    expect(tombstone?.dirty).toBe(1);
   });
 });

@@ -1,7 +1,7 @@
 import { formatDuration, formatOffset } from '../domain/format';
-import type { SessionHistory } from '../domain/types';
+import type { SessionSummary } from '../domain/types';
 
-export function SessionBreakdown({ record }: { record: SessionHistory }) {
+export function SessionBreakdown({ record }: { record: SessionSummary }) {
   const plannedMs = record.plannedTotalSec * 1000;
   return (
     <>

@@ -1,22 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { SessionBreakdown } from '../components/SessionBreakdown';
 import { formatDuration, formatSessionDate } from '../domain/format';
-import type { SessionHistory } from '../domain/types';
-import { getSession, listSessions } from '../storage/db';
+import { deleteSession, getSession, listSessions } from '../storage/db';
+import { requestSync } from '../sync/sync';
 
 export function HistoryScreen({
   onBack,
   onOpen,
 }: {
   onBack: () => void;
-  onOpen: (id: number) => void;
+  onOpen: (id: string) => void;
 }) {
-  const [sessions, setSessions] = useState<SessionHistory[] | null>(null);
-  useEffect(() => {
-    listSessions()
-      .then(setSessions)
-      .catch(() => setSessions([]));
-  }, []);
+  // Live, so sessions pulled from other devices appear without leaving the screen.
+  const sessions = useLiveQuery(listSessions);
 
   return (
     <main className="screen history">
@@ -26,13 +22,13 @@ export function HistoryScreen({
         </button>
         <h1>History</h1>
       </header>
-      {sessions === null ? null : sessions.length === 0 ? (
+      {sessions === undefined ? null : sessions.length === 0 ? (
         <p className="hint">No sessions yet. Go practise!</p>
       ) : (
         <ul className="history-list">
           {sessions.map((h) => (
             <li key={h.id}>
-              <button onClick={() => h.id !== undefined && onOpen(h.id)}>
+              <button onClick={() => onOpen(h.id)}>
                 <span className="history-date">{formatSessionDate(h.startedAt)}</span>
                 <span className="history-time">
                   {formatDuration(h.actualTotalMs)} / {formatDuration(h.plannedTotalSec * 1000)}
@@ -50,13 +46,16 @@ export function HistoryScreen({
   );
 }
 
-export function HistoryDetailScreen({ id, onBack }: { id: number; onBack: () => void }) {
-  const [record, setRecord] = useState<SessionHistory | null | undefined>(undefined);
-  useEffect(() => {
-    getSession(id)
-      .then((r) => setRecord(r ?? null))
-      .catch(() => setRecord(null));
-  }, [id]);
+export function HistoryDetailScreen({ id, onBack }: { id: string; onBack: () => void }) {
+  // undefined while loading, null once we know it's missing or deleted.
+  const record = useLiveQuery(async () => (await getSession(id)) ?? null, [id]);
+
+  const remove = async () => {
+    if (!window.confirm('Delete this session from your history?')) return;
+    await deleteSession(id);
+    void requestSync();
+    onBack();
+  };
 
   return (
     <main className="screen summary">
@@ -65,6 +64,11 @@ export function HistoryDetailScreen({ id, onBack }: { id: number; onBack: () => 
           ◀ History
         </button>
         <h1>{record ? `${record.planName} plan` : 'Session'}</h1>
+        {record && (
+          <button className="btn ghost danger" onClick={remove}>
+            Delete
+          </button>
+        )}
       </header>
       {record === null && <p className="hint">Session not found.</p>}
       {record && (

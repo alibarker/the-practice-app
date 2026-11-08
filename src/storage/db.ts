@@ -1,24 +1,63 @@
 import Dexie, { type EntityTable } from 'dexie';
-import type { SessionHistory } from '../domain/types';
+import type { SessionHistory, SessionSummary } from '../domain/types';
 
-const db = new Dexie('the-practice-app') as Dexie & {
-  sessions: EntityTable<SessionHistory, 'id'>;
+/** A history row as stored on this device. `dirty` is 1 until the row has been pushed. */
+export type LocalSession = SessionHistory & { dirty: 0 | 1 };
+
+export const db = new Dexie('the-practice-app') as Dexie & {
+  history: EntityTable<LocalSession, 'id'>;
 };
 
 db.version(1).stores({
   sessions: '++id, startedAt',
 });
 
-export async function saveSession(record: SessionHistory): Promise<number> {
-  return (await db.sessions.add(record)) as number;
+// v2: string UUID keys and sync fields. IndexedDB can't change a primary key in place,
+// so v1 rows move from `sessions` to a new `history` table.
+db.version(2)
+  .stores({
+    sessions: null,
+    history: 'id, startedAt, dirty',
+  })
+  .upgrade(async (tx) => {
+    const old = (await tx.table('sessions').toArray()) as (SessionSummary & { id: number })[];
+    const now = Date.now();
+    await tx.table('history').bulkAdd(
+      old.map(({ id: _oldId, ...rest }): LocalSession => ({
+        ...rest,
+        id: crypto.randomUUID(),
+        modifiedAt: now,
+        deletedAt: null,
+        dirty: 1,
+      })),
+    );
+  });
+
+export async function saveSession(summary: SessionSummary): Promise<SessionHistory> {
+  const record: LocalSession = {
+    ...summary,
+    id: crypto.randomUUID(),
+    modifiedAt: Date.now(),
+    deletedAt: null,
+    dirty: 1,
+  };
+  await db.history.add(record);
+  return record;
+}
+
+export async function deleteSession(id: string): Promise<void> {
+  const now = Date.now();
+  await db.history.update(id, { deletedAt: now, modifiedAt: now, dirty: 1 });
 }
 
 export async function listSessions(): Promise<SessionHistory[]> {
-  return db.sessions.orderBy('startedAt').reverse().toArray();
+  const rows = await db.history.orderBy('startedAt').reverse().toArray();
+  return rows.filter((r) => r.deletedAt === null);
 }
 
-export async function getSession(id: number): Promise<SessionHistory | undefined> {
-  return db.sessions.get(id);
+export async function getSession(id: string): Promise<SessionHistory | undefined> {
+  const row = await db.history.get(id);
+  return row && row.deletedAt === null ? row : undefined;
 }
 
 /** Ask the browser not to evict our data under storage pressure. */
