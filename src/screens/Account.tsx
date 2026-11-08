@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import {
   requestSync,
-  sendSignInCode,
+  createAccount,
   signOut,
   syncLabel,
   useSyncStatus,
-  verifySignInCode,
+  signInWithPassword,
 } from '../sync/sync';
 
 export function AccountScreen({ onBack }: { onBack: () => void }) {
@@ -79,17 +79,27 @@ function SignedIn() {
 }
 
 function SignIn() {
+  const [mode, setMode] = useState<'signIn' | 'create'>('signIn');
   const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [step, setStep] = useState<'email' | 'code'>('email');
+  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const run = async (fn: () => Promise<void>) => {
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
-      await fn();
+      if (mode === 'signIn') {
+        await signInWithPassword(email.trim(), password);
+      } else if (await createAccount(email.trim(), password)) {
+        setNotice(
+          'Account created. Tap the confirmation link Supabase has emailed you, then come back and sign in.',
+        );
+        setMode('signIn');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -97,69 +107,51 @@ function SignIn() {
     }
   };
 
-  const submitEmail = (e: FormEvent) => {
-    e.preventDefault();
-    void run(async () => {
-      await sendSignInCode(email.trim());
-      setStep('code');
-    });
-  };
-
-  const submitCode = (e: FormEvent) => {
-    e.preventDefault();
-    void run(() => verifySignInCode(email.trim(), code.trim()));
-  };
+  const creating = mode === 'create';
 
   return (
     <div className="account-panel">
       <p className="hint">
         Sign in to keep your practice history in sync across your iPad, phone and laptop.
       </p>
-      {step === 'email' ? (
-        <form onSubmit={submitEmail} className="account-form">
-          <label>
-            Email
-            <input
-              type="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </label>
-          <button className="btn primary" disabled={busy || !email.trim()}>
-            Email me a code
-          </button>
-        </form>
-      ) : (
-        <form onSubmit={submitCode} className="account-form">
-          <label>
-            Code sent to {email}
-            <input
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              pattern="[0-9]*"
-              required
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-            />
-          </label>
-          <button className="btn primary" disabled={busy || !code.trim()}>
-            Sign in
-          </button>
-          <button
-            type="button"
-            className="btn ghost"
-            onClick={() => {
-              setStep('email');
-              setCode('');
-              setError(null);
-            }}
-          >
-            Use a different email
-          </button>
-        </form>
-      )}
+      <form onSubmit={submit} className="account-form">
+        <label>
+          Email
+          <input
+            type="email"
+            autoComplete="username"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </label>
+        <label>
+          Password
+          <input
+            type="password"
+            autoComplete={creating ? 'new-password' : 'current-password'}
+            minLength={creating ? 8 : undefined}
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </label>
+        <button className="btn primary" disabled={busy || !email.trim() || !password}>
+          {creating ? 'Create account' : 'Sign in'}
+        </button>
+        <button
+          type="button"
+          className="btn ghost"
+          onClick={() => {
+            setMode(creating ? 'signIn' : 'create');
+            setError(null);
+            setNotice(null);
+          }}
+        >
+          {creating ? 'I already have an account' : 'First time? Create an account'}
+        </button>
+      </form>
+      {notice && <p role="status">{notice}</p>}
       {error && <p className="form-error">{error}</p>}
     </div>
   );

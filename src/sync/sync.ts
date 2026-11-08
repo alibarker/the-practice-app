@@ -145,20 +145,22 @@ export function initSync(): void {
   });
 }
 
-/** Email a one-time sign-in code. Codes, not magic links: on iOS a link would open Safari, not the installed app. */
-export async function sendSignInCode(email: string): Promise<void> {
+/**
+ * Email + password rather than emailed codes or links: Supabase's built-in email sender can't
+ * include a code, and on iOS a link opens Safari rather than the installed app.
+ */
+export async function signInWithPassword(email: string, password: string): Promise<void> {
   if (!client) throw new Error('Sync is not configured');
-  const { error } = await client.auth.signInWithOtp({
-    email,
-    options: { shouldCreateUser: true },
-  });
+  const { error } = await client.auth.signInWithPassword({ email, password });
   if (error) throw new Error(error.message);
 }
 
-export async function verifySignInCode(email: string, code: string): Promise<void> {
+/** Returns true if Supabase wants the email confirmed before the first sign-in. */
+export async function createAccount(email: string, password: string): Promise<boolean> {
   if (!client) throw new Error('Sync is not configured');
-  const { error } = await client.auth.verifyOtp({ email, token: code, type: 'email' });
+  const { data, error } = await client.auth.signUp({ email, password });
   if (error) throw new Error(error.message);
+  return data.session === null;
 }
 
 /** History stays on this device; anything new is uploaded on the next sign-in. */
